@@ -1,0 +1,64 @@
+TurmaVPN • primeira rede da turma
+
+O pacote contém o cliente gráfico para Windows, o gerenciador da rede para Windows e Linux e o código-fonte dos dois. O WireGuard cria o adaptador e cifra os pacotes. A TurmaVPN cuida de chaves, convites, endereços e conexão. Cada PC gera sua chave privada localmente.
+
+O que você precisa
+• Um computador para hospedar: Windows 10/11 com Python 3.9+ e WireGuard oficial, ou Debian/Ubuntu com systemd e Python 3.9+. Cada amigo que entrar pelo cliente usa Windows 10/11, Python com tkinter e WireGuard para Windows. Downloads: https://www.python.org/downloads/windows/ e https://www.wireguard.com/install/
+• Quem hospeda precisa de IPv4 público ou DNS apontando para esse IPv4, e de UDP 51820 acessível. Em casa, encaminhe UDP 51820 no roteador para o IP local do computador anfitrião. Os amigos só precisam conseguir sair por UDP.
+• Reserve a faixa 10.78.24.0/24 para a turma. Os nomes de interface usados são turmavpn (cliente Windows ou host Linux) e turmahost (host Windows).
+
+1A. Hospedar no Windows
+Extraia o ZIP no computador que vai ficar ligado durante a partida. Clique com o botão direito em Hospedar-TurmaVPN.cmd e escolha “Executar como administrador”. No menu, escolha “1 Criar rede” e digite o IPv4 público ou DNS deste host. O programa cria o túnel, habilita o encaminhamento IPv4 na interface turmahost e prepara a regra UDP 51820 no Firewall do Windows.
+
+Para jogar nesse mesmo PC, abra a partida e passe o endereço 10.78.24.1 aos amigos. O anfitrião já participa da rede. Deixe o PC acordado. Pode fechar o menu. Para parar o túnel, escolha “5 Parar hospedagem”. Depois de reiniciar o Windows ou parar o túnel, abra o menu e escolha “6 Retomar hospedagem”. Os amigos mantêm os convites e IPs.
+
+Também dá para usar um terminal como administrador na pasta extraída:
+    py -3 servidor.py criar vpn.exemplo.com
+    py -3 servidor.py listar
+    py -3 servidor.py parar
+    py -3 servidor.py aplicar
+
+1B. Hospedar no Linux
+Na pasta extraída, rode:
+
+    sudo apt update
+    sudo apt install python3 wireguard-tools iptables
+    sudo python3 servidor.py criar vpn.exemplo.com
+
+Troque vpn.exemplo.com pelo DNS ou IPv4 real. Libere 51820/UDP no firewall do provedor e do Linux. Se já usa UFW, a regra de entrada é “sudo ufw allow 51820/udp”. O programa prepara as regras FORWARD do iptables e inicia o serviço no boot. Se outro gerenciador também filtra encaminhamento, permita tráfego entre turmavpn e turmavpn nele. “sudo python3 servidor.py parar” para a hospedagem e desativa o início automático. “sudo python3 servidor.py aplicar” retoma os dois. As instalações Linux existentes podem usar os novos arquivos com o mesmo estado e as mesmas chaves.
+
+2. Cada jogador gera sua chave
+Extraia o ZIP no Windows. Clique com o botão direito em Abrir-TurmaVPN.cmd e escolha “Executar como administrador”. Se preferir, abra um terminal como administrador na pasta extraída e execute:
+
+    py -3 cliente.py
+
+Clique em “Copiar minha chave pública” e envie a chave para quem hospeda. Cada PC cliente precisa do seu próprio convite. Pule esta etapa no computador que hospeda a VPN.
+
+3. Quem hospeda devolve um convite por computador
+No menu do host Windows, use “2 Convidar amigo”, informe o nome e cole a chave pública. O menu mostra onde salvou o arquivo .turma. Se estiver usando o terminal, use o comando do seu sistema abaixo. Troque CHAVE_PUBLICA pela chave copiada. Use um nome diferente para cada PC.
+
+    Windows: py -3 servidor.py convidar ana CHAVE_PUBLICA --arquivo ana.turma
+    Linux:   sudo python3 servidor.py convidar ana CHAVE_PUBLICA --arquivo ana.turma
+
+O comando Linux da primeira versão também continua disponível:
+
+    sudo python3 servidor.py convidar ana CHAVE_PUBLICA > ana.turma
+
+Envie ana.turma para a Ana. O arquivo só contém dados públicos e funciona com a chave privada daquele PC. Envie pelo canal que vocês já usam entre si para que ela reconheça a origem. No Windows, Ana clica em “Abrir convite .turma” e depois em “Conectar”. O primeiro contato pode levar alguns segundos. Fechar a janela mantém o serviço ativo. “Desconectar” para o serviço e remove sua inicialização automática.
+
+4. Testem entre dois PCs
+Conectem um cliente e testem primeiro com o host (10.78.24.1). Para verificar o encaminhamento, conectem dois clientes com convites diferentes e testem de um para o outro. No menu, “3 Listar amigos” mostra os IPs e o tempo desde o último contato. No Linux, use “sudo python3 servidor.py listar”. No PC que hospeda a partida, abra um jogo com suporte a conexão direta e permita a porta do jogo no Firewall do Windows para os IPs da turma (10.78.24.0/24). No segundo PC, informe o IP virtual que aparece na janela do primeiro, mais a porta se o jogo pedir. A lista automática de jogos em LAN por broadcast ou multicast fica fora desta versão. Só o tráfego destinado à faixa da turma passa pela VPN.
+
+Se quiserem um teste independente do jogo entre dois clientes, abram uma pasta vazia em outro terminal no PC da Ana e iniciem o servidor temporário abaixo (troquem o IP pelo da janela dela). Permitam TCP 8765 para a faixa da turma durante o teste.
+
+    py -3 -m http.server 8765 --bind 10.78.24.2
+
+O outro jogador abre http://10.78.24.2:8765 no navegador. Quando a lista da pasta aparecer, os PCs conseguiram trocar dados pelo túnel. Encerrem o teste com Ctrl+C e removam a regra temporária.
+
+Gerenciar e diagnosticar
+• No Windows use a opção 4 do menu para remover alguém. No Linux, “sudo python3 servidor.py remover ana” revoga o acesso dessa chave. Para reemitir um convite, repita “convidar” com o mesmo nome e a mesma chave. Para trocar de computador, remova o cadastro antigo e cadastre a nova chave.
+• Para reaplicar o estado salvo após uma falha, use “sudo python3 servidor.py aplicar”. Para investigar o serviço, use “sudo systemctl status wg-quick@turmavpn”. Evite editar a configuração gerada à mão.
+• Se os dois PCs têm contato recente com o servidor mas o jogo não conecta, confira a porta do jogo, o firewall e se o jogo escuta no IP da VPN ou em todas as interfaces.
+• Se o primeiro contato nunca aparece, confira o endereço público e UDP 51820. Em uma rede residencial atrás de CGNAT, use uma VPS ou outro servidor com IPv4 público alcançável.
+• O host Windows guarda o estado e a chave do servidor em Arquivos de Programas/TurmaVPN-Servidor. Após uma falha de configuração, corrija a causa e use a opção 6.
+• A chave do cliente Windows fica na pasta TurmaVPN em Arquivos de Programas, com acesso para administradores e SYSTEM. O estado do host Linux fica em /etc/turmavpn e a configuração do WireGuard em /etc/wireguard/turmavpn.conf. O servidor encaminha os pacotes e precisa permanecer ligado. O tráfego é cifrado de cada PC até ele.
